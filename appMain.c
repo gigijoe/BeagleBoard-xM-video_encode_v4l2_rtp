@@ -34,6 +34,10 @@
  * elementary stream video file. The format of the yuv file depends on the
  * device, for dm6467 it's 420 planar while on dm355 it's 422 interleaved.
  */
+/*
+ * Modify by Steve Chang
+ * stevegigijoe@yahoo.com.tw
+*/
 
 #include <stdio.h>
 
