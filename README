@@ -1,0 +1,9 @@
+This application is modify from TI's DMAI demo code.
+The application does the H.264 video streaming with H.264-RTP.
+
+The video source is from camera by V4L2 interface then encode video raw data by DSP.
+Finally the encoded NAL data pack by H.264 RTP and send out through ethernet.
+
+Steve Chang
+stevegigijoe@yahoo.com.tw
+ 
