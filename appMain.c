@@ -34,10 +34,6 @@
  * elementary stream video file. The format of the yuv file depends on the
  * device, for dm6467 it's 420 planar while on dm355 it's 422 interleaved.
  */
-/*
- * Modify by Steve Chang
- * stevegigijoe@yahoo.com.tw
-*/
 
 #include <stdio.h>
 
@@ -209,7 +205,7 @@ int CameraThread_Init(char *device, int width, int height, int bufSize, BufferGf
 
     int i;
     struct v4l2_buffer buf;
-    for(i=0;i<VIDEO_BUFFER_COUNT;++i) {
+    for(i=0;i<VIDEO_BUFFER_COUNT;i++) {
       CLEAR (buf);
       buf.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 #ifdef USERPTR
@@ -281,8 +277,19 @@ close_camera:
 void *CameraThread_Process(void *args)
 {  
   struct v4l2_buffer buf;
+  int i;
   
   while(!bShutdown) {
+    for(i=0;i<VIDEO_BUFFER_COUNT;i++) {
+      if(vbuf[i].mark == 0)
+        break;
+    }
+    
+    if(i == VIDEO_BUFFER_COUNT) { /*  All buffers are filled  */
+      usleep(1000); /*  Wait 1ms  */
+      continue;
+    }
+      
     pthread_mutex_lock(&cameraMutex);
 
     CLEAR (buf);
@@ -298,7 +305,6 @@ void *CameraThread_Process(void *args)
       break;
     }
     
-    int i;
     for(i=0;i<VIDEO_BUFFER_COUNT;i++)  {
       if(buf.m.userptr == (unsigned long) vbuf[i].start && buf.length == vbuf[i].length)
         break;
@@ -324,7 +330,7 @@ void CameraThread_Run()
 {
   struct v4l2_buffer buf;
   int i;
-  for(i=0;i<VIDEO_BUFFER_COUNT;++i) {
+  for(i=0;i<VIDEO_BUFFER_COUNT;i++) {
     CLEAR (buf);
 
     buf.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -361,7 +367,7 @@ void CameraThread_Deinit()
     printf("V4L2 : VIDIOC_STREAMOFF fail !!!\n");
 
   int i;
-  for(i=0;i<VIDEO_BUFFER_COUNT;++i) {
+  for(i=0;i<VIDEO_BUFFER_COUNT;i++) {
     if(vbuf[i].start && vbuf[i].length)
 #ifdef USERPTR
             Buffer_delete(hCameraBuf[i]);
@@ -561,6 +567,7 @@ Void appMain(Args * args)
     Engine_Handle          hEngine   = NULL;
     Time_Handle            hTime     = NULL;
     Time_Handle            hTimestamp= NULL;
+    Time_Handle            hTimeFps  = NULL;
     Buffer_Handle          hOutBuf   = NULL;
     Buffer_Handle          hInBuf    = NULL;
     Buffer_Handle          hReconBuf = NULL;
@@ -570,6 +577,7 @@ Void appMain(Args * args)
     Cpu_Device             device;
     ColorSpace_Type        colorSpace;
     UInt32                 time;
+    double                 fps = 0;
 
     printf("Starting application...\n");
 
@@ -596,6 +604,12 @@ Void appMain(Args * args)
 
     hTimestamp = Time_create(&tAttrs);
     if(hTimestamp == NULL)  {
+      printf("Failed to create Time object\n");
+      goto cleanup;
+    }
+
+    hTimeFps = Time_create(&tAttrs);
+    if(hTimeFps == NULL)  {
       printf("Failed to create Time object\n");
       goto cleanup;
     }
@@ -746,12 +760,20 @@ Void appMain(Args * args)
 
     CameraThread_Run();
         
+    if (args->benchmark) {
+      if (Time_reset(hTime) < 0)
+        printf("Failed to reset timer\n");
+    
+      if (Time_reset(hTimeFps) < 0)
+        printf("Failed to reset timer\n");
+    }
+    
     while (!bShutdown)  {
         if(args->numFrames) {
           if(numFrame < args->numFrames)
             break;
         }
-                
+
         hInBuf = readFrameV4l2(args->benchmark);
         if(hInBuf == NULL) {
           usleep(10000); /*  10ms */
@@ -791,11 +813,6 @@ Void appMain(Args * args)
 
         /* Make sure the whole buffer is used for input */
         BufferGfx_resetDimensions(hInBuf);
-
-        if (args->benchmark) {
-          if (Time_reset(hTime) < 0)
-            printf("Failed to reset timer\n");
-        }
 
         if(numFrame % 30 == 0)  { /*  To generate IDR frame every 30 frames */
           int32_t status = 0;
@@ -983,20 +1000,31 @@ Void appMain(Args * args)
             }
 
             printf("[%d] Write : %uus\n", numFrame, (Uns)time);
-/*
-            if (Time_total(hTime, &time) < 0) {
-                printf("Failed to get timer total\n");
-                goto cleanup;
-            }
 
-            printf("Total: %uus\n", (Uns)time);
-*/
+            if (Time_reset(hTime) < 0)
+              printf("Failed to reset timer\n");
+        
+            if (Time_delta(hTimeFps, &time) < 0)
+              printf("Failed to get timer delta\n");
+            
+            double _fps = (double)1000000 / (Uns)time;
+            if(numFrame == 1)
+              fps = _fps;
+            else
+              fps = (fps + _fps) / 2;
+            
+            if(numFrame % 30 == 0)
+              printf("[%d] FPS : %f\n", numFrame, fps);
+
+            if (Time_reset(hTimeFps) < 0)
+              printf("Failed to reset timer\n");
         }
     }
 
+
     if (args->benchmark)
       printf("Average encode time : %dus\n", averageEncodeTime);
-
+    
     CameraThread_Deinit();
 
 cleanup:
