@@ -733,7 +733,8 @@ Void appMain(Args * args)
     gfxAttrs.bAttrs.reference      = TRUE;
 #endif
 
-    CameraThread_Init(args->videoDevice, args->width, args->height, inBufSize, &gfxAttrs);
+    if(-1 == CameraThread_Init(args->videoDevice, args->width, args->height, inBufSize, &gfxAttrs))
+      goto cleanup;
     
     /* Create the reconstructed frame buffer for raw yuv data */
     if (args->writeReconFrames) {
