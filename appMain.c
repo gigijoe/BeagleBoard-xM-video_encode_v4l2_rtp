@@ -576,8 +576,7 @@ Void appMain(Args * args)
     Int                    inBufSize, outBufSize;
     Cpu_Device             device;
     ColorSpace_Type        colorSpace;
-    UInt32                 time;
-    double                 fps = 0;
+    UInt32                 time, duration = 0;
 
     printf("Starting application...\n");
 
@@ -781,14 +780,7 @@ Void appMain(Args * args)
         }
             
         numFrame++;
-/*
-        if (args->benchmark) {
-          if (Time_delta(hTime, &time) < 0)
-            printf("Failed to get timer delta\n");
-          else
-            printf("[%d] Read : %uus\n", numFrame, (Uns)time);
-        }
-*/
+
         if (args->cache) {
             /*
              *  To meet xDAIS DMA Rule 7, when input buffers are cached, we
@@ -1003,22 +995,21 @@ Void appMain(Args * args)
 
             if (Time_reset(hTime) < 0)
               printf("Failed to reset timer\n");
-        
-            if (Time_delta(hTimeFps, &time) < 0)
-              printf("Failed to get timer delta\n");
-            
-            double _fps = (double)1000000 / (Uns)time;
-            if(numFrame == 1)
-              fps = _fps;
-            else
-              fps = (fps + _fps) / 2;
-            
-            if(numFrame % 30 == 0)
-              printf("[%d] FPS : %f\n", numFrame, fps);
-
-            if (Time_reset(hTimeFps) < 0)
-              printf("Failed to reset timer\n");
         }
+        
+        if (Time_delta(hTimeFps, &time) < 0)
+          printf("Failed to get timer delta\n");
+        
+        duration += (Uns)time;
+        
+        if(numFrame % 30 == 0)  {
+          double fps = (double)1000000 / (duration / 30);
+          duration = 0;
+          printf("[%d] FPS : %f\n", numFrame, fps);
+        }
+        
+        if (Time_reset(hTimeFps) < 0)
+          printf("Failed to reset timer\n");
     }
 
 
