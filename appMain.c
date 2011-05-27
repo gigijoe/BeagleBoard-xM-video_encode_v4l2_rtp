@@ -109,7 +109,7 @@ void sig_handler(int s)
 
 int cameraFd   = -1;
 
-static pthread_t cameraThreadId;
+static pthread_t cameraThreadId = 0;
 static pthread_mutex_t cameraMutex = PTHREAD_MUTEX_INITIALIZER;
 
 Buffer_Handle hCameraBuf[VIDEO_BUFFER_COUNT];
@@ -279,6 +279,10 @@ void *CameraThread_Process(void *args)
   struct v4l2_buffer buf;
   int i;
   
+  Time_Handle hTime = NULL;
+  Time_Attrs tAttrs = Time_Attrs_DEFAULT;
+  hTime = Time_create(&tAttrs);
+
   while(!bShutdown) {
     for(i=0;i<VIDEO_BUFFER_COUNT;i++) {
       if(vbuf[i].mark == 0)
@@ -304,13 +308,13 @@ void *CameraThread_Process(void *args)
       perror("V4L2 : VIDIOC_DQBUF fail !!!");
       break;
     }
-    
+
+#ifdef USERPTR
     for(i=0;i<VIDEO_BUFFER_COUNT;i++)  {
       if(buf.m.userptr == (unsigned long) vbuf[i].start && buf.length == vbuf[i].length)
         break;
     }
 
-#ifdef USERPTR
     vbuf[i].mark++;
 #else
     vbuf[buf.index].mark++;
@@ -320,7 +324,13 @@ void *CameraThread_Process(void *args)
     
     pthread_mutex_unlock(&cameraMutex);
     
-    usleep(33000);  /*  33ms which is 30 fps  */
+    UInt32 time;
+    Time_delta(hTime, &time);
+    
+    if(time < 33000)
+      usleep(33000 - time);  /*  33ms which is 30 fps  */
+    
+    Time_reset(hTime);
   }
   
   return 0;
@@ -1017,9 +1027,10 @@ Void appMain(Args * args)
     if (args->benchmark)
       printf("Average encode time : %dus\n", averageEncodeTime);
     
-    CameraThread_Deinit();
-
 cleanup:
+    if (cameraThreadId)
+        CameraThread_Deinit();
+    
     /* Clean up the application */
     if (hOutBuf) {
         Buffer_delete(hOutBuf);
